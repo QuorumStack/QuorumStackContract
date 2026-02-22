@@ -11,7 +11,7 @@ plan:
         - contract-publish:
             contract-name: Quorum
             expected-sender: SP1GNDB8SXJ51GBMSVVXMWGTPRFHGSMWNNBEY25A4
-            cost: 734712
+            cost: 170200
             path: contracts/Quorum.clar
             anchor-block-only: true
             clarity-version: 2

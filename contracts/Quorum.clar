@@ -1,30 +1,13 @@
-;; title: QuorumStack Multisig Wallet
+;; title: QuorumStack
 ;; version: 1.0.0
-;; summary: A decentralized M-of-N multisignature wallet on the Stacks blockchain.
-;; description:
-;;   QuorumStack requires a configurable quorum of owner approvals before any
-;;   STX or SIP-010 token transaction executes. All state lives on-chain.
-;;   Owner management (add/remove) and threshold changes also require quorum.
-
-;; ============================================================
-;;  SIP-010 Fungible Token Trait
-;; ============================================================
-
 (define-trait sip-010-trait
   (
-    ;; Transfer tokens from sender to recipient
     (transfer (uint principal principal (optional (buff 34))) (response bool uint))
-    ;; Get the token balance of an address
     (get-balance (principal) (response uint uint))
-    ;; Get the total supply of the token
     (get-total-supply () (response uint uint))
-    ;; Get the token name
     (get-name () (response (string-ascii 32) uint))
-    ;; Get the token symbol
     (get-symbol () (response (string-ascii 10) uint))
-    ;; Get the number of decimals
     (get-decimals () (response uint uint))
-    ;; Get token URI
     (get-token-uri () (response (optional (string-utf8 256)) uint))
   )
 )
@@ -48,41 +31,18 @@
 (define-constant err-owner-not-found      (err u112))
 (define-constant err-min-owners           (err u113))
 
-;; ============================================================
-;;  Transaction Type Constants
-;; ============================================================
-
-;; tx-type values stored in the transaction map
 (define-constant TX-TYPE-STX-TRANSFER     u1)
 (define-constant TX-TYPE-TOKEN-TRANSFER   u2)
 (define-constant TX-TYPE-ADD-OWNER        u3)
 (define-constant TX-TYPE-REMOVE-OWNER     u4)
 (define-constant TX-TYPE-CHANGE-THRESHOLD u5)
 
-;; ============================================================
-;;  Data Variables
-;; ============================================================
-
-;; Number of approvals required to execute any transaction
 (define-data-var threshold uint u2)
-
-;; Total number of active owners
 (define-data-var owner-count uint u0)
-
-;; Auto-incrementing ID counter for transaction proposals
 (define-data-var tx-nonce uint u0)
 
-;; ============================================================
-;;  Data Maps
-;; ============================================================
-
-;; Registered owners: principal -> bool
 (define-map owners principal bool)
 
-;; Transaction proposals
-;; Stores all metadata for a proposal. token-contract is non-none only for
-;; TX-TYPE-TOKEN-TRANSFER proposals. new-principal is used for add/remove owner.
-;; new-value is used for change-threshold.
 (define-map transactions
   uint  ;; tx-id
   {
@@ -101,43 +61,26 @@
   }
 )
 
-;; Per-owner approval tracking: {tx-id, owner} -> bool
 (define-map approvals
   { tx-id: uint, owner: principal }
   bool
 )
 
-;; ============================================================
-;;  Deployment-time Initialization
-;; ============================================================
-;; The contract deployer is automatically registered as the first owner.
-;; Additional owners and a new threshold should be set immediately after
-;; deployment via propose-add-owner + approve + execute flows, OR the
-;; deployer can call the one-time init function below before any other
-;; transaction is submitted.
-
 (map-set owners tx-sender true)
 (var-set owner-count u1)
 
-;; ============================================================
-;;  Private Helper Functions
-;; ============================================================
-
-;; Assert the caller is a registered owner
 (define-private (assert-owner)
   (if (default-to false (map-get? owners tx-sender))
     (ok true)
     err-not-owner)
 )
 
-;; Assert the transaction exists and return it
 (define-private (get-tx-or-err (tx-id uint))
   (match (map-get? transactions tx-id)
     tx (ok tx)
     err-tx-not-found)
 )
 
-;; Assert the tx is still pending (not executed, not cancelled, not expired)
 (define-private (assert-pending (tx { proposer: principal, tx-type: uint, recipient: (optional principal), amount: (optional uint), memo: (optional (buff 34)), token-contract: (optional principal), new-principal: (optional principal), new-value: (optional uint), approval-count: uint, executed: bool, cancelled: bool, expires-at: uint }))
   (if (get executed tx)
     err-tx-executed
@@ -148,12 +91,6 @@
         (ok true))))
 )
 
-;; ============================================================
-;;  Public Functions
-;; ============================================================
-
-;;  propose-transfer
-;;  Any owner proposes an STX transfer from the contract wallet
 (define-public (propose-transfer
     (recipient principal)
     (amount    uint)
@@ -183,8 +120,6 @@
       (ok tx-id)))
 )
 
-;;  propose-token-transfer
-;;  Any owner proposes a SIP-010 token transfer from the contract wallet
 (define-public (propose-token-transfer
     (token-contract principal)
     (recipient      principal)
@@ -215,8 +150,6 @@
       (ok tx-id)))
 )
 
-;;  propose-add-owner
-;;  Propose adding a new owner address to the wallet
 (define-public (propose-add-owner
     (new-owner  principal)
     (expires-at uint))
@@ -244,8 +177,6 @@
       (ok tx-id)))
 )
 
-;;  propose-remove-owner
-;;  Propose removing an existing owner from the wallet
 (define-public (propose-remove-owner
     (owner      principal)
     (expires-at uint))
@@ -275,8 +206,6 @@
       (ok tx-id)))
 )
 
-;;  propose-change-threshold
-;;  Propose changing the quorum signature threshold
 (define-public (propose-change-threshold
     (new-threshold uint)
     (expires-at    uint))
@@ -305,9 +234,6 @@
       (ok tx-id)))
 )
 
-;;  approve
-;;  An owner casts their approval for a pending transaction proposal.
-;;  The proposer cannot self-approve their own proposal (reduces unilateral risk).
 (define-public (approve (tx-id uint))
   (begin
     (try! (assert-owner))
@@ -327,8 +253,6 @@
         (ok new-count))))
 )
 
-;;  revoke
-;;  An owner withdraws their approval from a pending transaction before execution.
 (define-public (revoke (tx-id uint))
   (begin
     (try! (assert-owner))
@@ -346,9 +270,6 @@
         (ok new-count))))
 )
 
-;;  execute
-;;  Execute a transaction once quorum of approvals has been reached.
-;;  Any owner can trigger execution.
 (define-public (execute (tx-id uint))
   (begin
     (try! (assert-owner))
@@ -373,19 +294,13 @@
               (execute-remove-owner tx tx-id)
               (if (is-eq (get tx-type tx) TX-TYPE-CHANGE-THRESHOLD)
                 (execute-change-threshold tx tx-id)
-                (err u199))))))))  ;; unknown type guard
+                (err u199))))))))
 )
 
-;;  execute-token
-;;  Separate entry point for SIP-010 token transfer execution.
-;;  The caller passes in the token contract as a trait reference so Clarity
-;;  can call it dynamically. The tx must already have quorum; execution state
-;;  is managed here to prevent double-execution.
 (define-public (execute-token (tx-id uint) (token <sip-010-trait>))
   (begin
     (try! (assert-owner))
     (let ((tx (try! (get-tx-or-err tx-id))))
-      ;; tx-type must be token transfer
       (asserts! (is-eq (get tx-type tx) TX-TYPE-TOKEN-TRANSFER) (err u198))
       (try! (assert-pending tx))
       (asserts! (>= (get approval-count tx) (var-get threshold)) err-below-threshold)
@@ -404,10 +319,6 @@
         (print { event: "token-transfer-executed", tx-id: tx-id, executor: tx-sender, recipient: recipient, amount: amount })
         (ok true))))
 )
-
-;; ============================================================
-;;  Private Execution Helpers
-;; ============================================================
 
 (define-private (execute-stx-transfer
     (tx { proposer: principal, tx-type: uint, recipient: (optional principal), amount: (optional uint), memo: (optional (buff 34)), token-contract: (optional principal), new-principal: (optional principal), new-value: (optional uint), approval-count: uint, executed: bool, cancelled: bool, expires-at: uint })
@@ -466,12 +377,6 @@
     (ok true))
 )
 
-;; ============================================================
-;;  Read-Only Functions
-;; ============================================================
-
-;;  get-transaction
-;;  Returns the full details of a transaction proposal by ID
 (define-read-only (get-transaction (tx-id uint))
   (map-get? transactions tx-id)
 )
@@ -514,17 +419,10 @@
   (stx-get-balance (as-contract tx-sender))
 )
 
-;;  get-tx-nonce
-;;  Returns the latest transaction ID (total proposals submitted)
 (define-read-only (get-tx-nonce)
   (var-get tx-nonce)
 )
 
-;; ============================================================
-;;  Test Utility Functions
-;; ============================================================
-
-;; A simple counter for testing contract interaction on mainnet
 (define-data-var test-counter uint u0)
 
 (define-public (increment-counter)

@@ -519,3 +519,32 @@
 (define-read-only (get-tx-nonce)
   (var-get tx-nonce)
 )
+
+;; ============================================================
+;;  Test Utility Functions
+;; ============================================================
+
+;; A simple counter for testing contract interaction on mainnet
+(define-data-var test-counter uint u0)
+
+(define-public (increment-counter)
+  (begin
+    (var-set test-counter (+ (var-get test-counter) u1))
+    (ok (var-get test-counter))
+  )
+)
+
+(define-public (decrement-counter)
+  (begin
+    ;; Prevents underflow if already at 0
+    (if (> (var-get test-counter) u0)
+        (var-set test-counter (- (var-get test-counter) u1))
+        true
+    )
+    (ok (var-get test-counter))
+  )
+)
+
+(define-read-only (get-test-counter)
+  (var-get test-counter)
+)

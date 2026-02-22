@@ -76,7 +76,7 @@
 ;;  Data Maps
 ;; ============================================================
 
-;; Registered owners: principal → bool
+;; Registered owners: principal -> bool
 (define-map owners principal bool)
 
 ;; Transaction proposals
@@ -101,7 +101,7 @@
   }
 )
 
-;; Per-owner approval tracking: {tx-id, owner} → bool
+;; Per-owner approval tracking: {tx-id, owner} -> bool
 (define-map approvals
   { tx-id: uint, owner: principal }
   bool
@@ -362,7 +362,7 @@
       (if (is-eq (get tx-type tx) TX-TYPE-STX-TRANSFER)
         (execute-stx-transfer tx tx-id)
         (if (is-eq (get tx-type tx) TX-TYPE-TOKEN-TRANSFER)
-          ;; Token transfers: caller must pass token contract as trait — see execute-token
+          ;; Token transfers: caller must pass token contract as trait - see execute-token
           ;; For now, mark as executed and fire an event that the off-chain handler finishes
           (begin
             (print { event: "token-transfer-pending-finalization", tx-id: tx-id })
